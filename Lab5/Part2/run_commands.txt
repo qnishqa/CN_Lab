@@ -1,0 +1,110 @@
+LAB ASSIGNMENT 5 - RUN COMMANDS
+================================
+Run receiver/server FIRST in one terminal, then sender/client in another.
+All ports below are examples - change them if already in use.
+
+
+PART A - Stop-and-Wait over UDP
+--------------------------------
+Compile:
+    gcc -o receiver receiver.c
+    gcc -o sender sender.c
+
+Run:
+    Terminal 1:  ./receiver 9090
+    Terminal 2:  ./sender 127.0.0.1 9090
+
+Sender will then ask (interactively):
+    Enter number of messages: <n>
+    Enter message 1: <text>
+    ... etc
+
+Important bits:
+    - Receiver drops every 5th ACK on purpose (ack_count % 5 == 0) to
+      demonstrate timeout + retransmission. Don't be alarmed when it happens.
+    - Sender timeout is 2 seconds (TIMEOUT_SEC in sender.c) - change it if
+      you want faster/slower demo runs.
+    - Use at least 5 messages in one run so the ACK-loss demo actually
+      triggers at least once (assignment wants 2-3 loss events, so ~10-15
+      messages in one run is a safer bet).
+
+
+PART B / PROBLEM 1 - Go-Back-N
+-------------------------------
+Compile:
+    gcc -o gbn_receiver gbn_receiver.c
+    gcc -o gbn_sender gbn_sender.c
+
+Run:
+    Terminal 1:  ./gbn_receiver 9091
+    Terminal 2:  ./gbn_sender 127.0.0.1 9091 10 4 30 7
+
+    Sender args: <ip> <port> <num_packets> <window_size> <loss_prob_%> [seed]
+    (seed is optional - fixes the random loss pattern so runs are repeatable)
+
+Important bits:
+    - loss_prob is a percentage (0-100), applied per packet send.
+    - GBN receiver only accepts packets in strict order and discards
+      anything out of order, even if it arrived correctly - that's the
+      protocol's defining (in)efficiency.
+    - On timeout the sender resends the WHOLE window, not just the lost
+      packet - expect a higher retransmission count than Selective Repeat.
+
+
+PART B / PROBLEM 1 - Selective Repeat
+---------------------------------------
+Compile:
+    gcc -o sr_receiver sr_receiver.c
+    gcc -o sr_sender sr_sender.c
+
+Run:
+    Terminal 1:  ./sr_receiver 9092 4
+    Terminal 2:  ./sr_sender 127.0.0.1 9092 10 4 30 7
+
+    Receiver args: <port> <window_size>   <- window size must match sender's!
+    Sender args:   <ip> <port> <num_packets> <window_size> <loss_prob_%> [seed]
+
+Important bits:
+    - Use the SAME num_packets, window_size, loss_prob AND seed as your
+      Go-Back-N run to get a fair, directly comparable result (assignment
+      explicitly asks you to run both under the same loss pattern).
+    - Receiver buffers out-of-order packets and ACKs them individually.
+    - On timeout only the UNACKED packets are resent - compare the final
+      "Total retransmissions" line against the GBN run's.
+
+
+PART B / PROBLEM 2 - TCP Flow Control
+----------------------------------------
+Compile:
+    gcc -o tcp_server tcp_server.c
+    gcc -o tcp_client tcp_client.c
+
+Run (repeat for each combination the assignment asks for):
+    Terminal 1:  ./tcp_server 9093 8192 100
+    Terminal 2:  ./tcp_client 127.0.0.1 9093 50
+
+    Server args: <port> <rcvbuf_bytes> <delay_ms>
+    Client args: <server_ip> <port> <total_MB_to_send>
+
+Suggested experiment matrix (run all 4, note results for your report):
+    rcvbuf=8192,  delay=0
+    rcvbuf=8192,  delay=100
+    rcvbuf=32768, delay=0
+    rcvbuf=32768, delay=100
+
+Important bits:
+    - Start Wireshark BEFORE running these, capturing on loopback (or your
+      real interface if running client/server on different machines).
+      Filter: tcp.port == 9093
+    - The server prints the ACTUAL SO_RCVBUF the kernel gave it (usually
+      double what you requested, and clamped to a minimum) - report that
+      number, not just the one you asked for.
+    - Use a large-ish transfer (tens of MB) and a real delay (100ms+) if
+      testing on loopback locally - small transfers can complete before
+      the receive buffer ever fills up, so you won't see flow control
+      kick in.
+    - In Wireshark, the "Window size value" (calculated/scaled) field on
+      packets from server -> client is your advertised receive window.
+      Pick 1-2 packets and note Seq, Ack, Len, and Window size for the
+      report. A Win=0 packet (Zero Window) is a bonus if you see one, not
+      mandatory.
